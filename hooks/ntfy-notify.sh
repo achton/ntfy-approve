@@ -8,6 +8,11 @@
 
 set -e
 
+# Check dependencies
+if ! command -v jq &> /dev/null; then
+    exit 0
+fi
+
 # Load credentials
 CRED_FILE="$HOME/.config/ntfy/credentials"
 if [[ ! -f "$CRED_FILE" ]]; then
@@ -34,7 +39,7 @@ fi
 TITLE="Claude Code waiting for input"
 BODY="Project: ${PROJECT_NAME:-unknown}"
 if [[ -n "$CWD" ]]; then
-    BODY="${BODY}\nPath: ${CWD}"
+    BODY=$(printf "%s\nPath: %s" "$BODY" "$CWD")
 fi
 
 # Fire-and-forget POST to ntfy

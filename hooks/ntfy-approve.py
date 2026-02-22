@@ -16,6 +16,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 import urllib.request
 import urllib.error
 import base64
@@ -75,9 +76,10 @@ def handle_signal(signum, frame):
 
 def _relative_path(filepath, cwd):
     """Make a file path relative to cwd if it's underneath it."""
-    if cwd and filepath.startswith(cwd):
-        rel = filepath[len(cwd):].lstrip("/")
-        return rel or filepath
+    if cwd:
+        prefix = cwd.rstrip("/") + "/"
+        if filepath.startswith(prefix):
+            return filepath[len(prefix):] or filepath
     return filepath
 
 
@@ -154,9 +156,6 @@ def publish_notification(creds, title, body, tool_use_id, tag="wrench"):
         f"http, Deny, {response_url}, headers.Authorization={auth_header(creds)}, body='{deny_body}', clear=true",
     ])
 
-    # Use tool_use_id as message ID so we can delete it later
-    message_id = tool_use_id[:64]  # ntfy has a max ID length
-
     url = f"{server}/{topic_approve}"
     req = urllib.request.Request(url, data=body.encode(), method="POST")
     req.add_header("Authorization", auth_header(creds))
@@ -164,10 +163,11 @@ def publish_notification(creds, title, body, tool_use_id, tag="wrench"):
     req.add_header("Priority", "4")  # high
     req.add_header("Tags", tag)
     req.add_header("Actions", actions)
-    req.add_header("X-Id", message_id)
 
-    urllib.request.urlopen(req, timeout=10)
-    return message_id
+    # Parse ntfy's response to get the server-generated message ID for cleanup
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        result = json.loads(resp.read().decode())
+    return result.get("id", "")
 
 
 def poll_response(creds, tool_use_id):
@@ -220,9 +220,9 @@ def main():
     except json.JSONDecodeError:
         sys.exit(0)
 
-    tool_use_id = data.get("tool_use_id", "")
-    if not tool_use_id:
-        sys.exit(0)
+    # PermissionRequest input has no tool_use_id — generate one to correlate
+    # the notification with the phone's response
+    tool_use_id = str(uuid.uuid4())
 
     try:
         creds = load_credentials()
@@ -245,7 +245,14 @@ def main():
     if decision in ("allow", "deny"):
         # Phone answered — clear cleanup (notification already dismissed via clear=true)
         _cleanup_info["message_id"] = None
-        result = {"jsonrpc": "2.0", "result": {"decision": decision}}
+        result = {
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": decision},
+            }
+        }
+        if decision == "deny":
+            result["hookSpecificOutput"]["decision"]["message"] = "Denied from phone"
         print(json.dumps(result))
 
 

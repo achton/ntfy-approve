@@ -10,26 +10,26 @@ Both channels are active simultaneously — the terminal prompt and the phone no
 
 ```
 Claude Code
-  │
-  ├─ PermissionRequest hook (ntfy-approve.py)
-  │    Runs in parallel with terminal permission prompt.
-  │    ├─ POST notification with Approve/Deny buttons
-  │    ├─ Poll response topic for decision
-  │    ├─ Phone tap → return allow/deny → tool executes or is denied
-  │    ├─ Terminal answer first → notification auto-deleted from phone
-  │    └─ Timeout (120s) → exit silently, terminal prompt still active
-  │
-  └─ Notification hook (ntfy-notify.sh)
-       └─ idle_prompt → fire-and-forget push notification
+  |
+  +- PermissionRequest hook (ntfy-approve.py)
+  |    Runs in parallel with terminal permission prompt.
+  |    +- POST notification with Approve/Deny buttons
+  |    +- Poll response topic for decision
+  |    +- Phone tap -> return allow/deny -> tool executes or is denied
+  |    +- Terminal answer first -> notification auto-deleted from phone
+  |    +- Timeout (120s) -> exit silently, terminal prompt still active
+  |
+  +- Notification hook (ntfy-notify.sh)
+       +- idle_prompt -> fire-and-forget push notification
 
 ntfy server (Docker, port 8090)
-  ├─ Auth: deny-all default, single user with topic access
-  ├─ Topic: cc-approve  (notifications TO phone)
-  └─ Topic: cc-response (decisions FROM phone)
+  +- Auth: deny-all default, single user with topic access
+  +- Topic: cc-approve  (notifications TO phone)
+  +- Topic: cc-response (decisions FROM phone)
 
 Phone (ntfy app)
-  ├─ Connects via Tailscale or LAN
-  └─ Subscribed to cc-approve, action buttons POST to cc-response
+  +- Connects via Tailscale or LAN
+  +- Subscribed to cc-approve, action buttons POST to cc-response
 ```
 
 ## Notification format
@@ -38,34 +38,22 @@ Notifications show the project name prominently so you can distinguish between m
 
 | Tool | Title | Body | Emoji |
 |------|-------|------|-------|
-| Bash | `project · description` | `$ command` | 🖥️ |
-| Edit | `project · Edit filename` | relative path, old/new first line | ✏️ |
-| Write | `project · Write filename` | relative path | 📄 |
-| Other | `project · ToolName` | parameters | 🔧 |
+| Bash | `project . description` | `$ command` | computer |
+| Edit | `project . Edit filename` | relative path, old/new first line | pencil |
+| Write | `project . Write filename` | relative path | page |
+| Other | `project . ToolName` | parameters | wrench |
 
 ## Prerequisites
 
 - Docker
 - Python 3 (stdlib only, no pip packages)
+- jq (for the notification hook)
 - Phone with the [ntfy app](https://ntfy.sh/) (F-Droid recommended for self-hosted)
 - Network access from phone to server (Tailscale or LAN)
 
 ## Setup
 
-### 1. Start the ntfy server
-
-```bash
-cd docker/
-docker compose up -d
-```
-
-### 2. Create user and grant topic access
-
-```bash
-NTFY_PASSWORD=<your-password> ./docker/setup-auth.sh
-```
-
-### 3. Create credentials file
+### 1. Create credentials file
 
 Create `~/.config/ntfy/credentials`:
 
@@ -79,6 +67,22 @@ NTFY_TOPIC_RESPONSE=cc-response
 ```
 
 `NTFY_SERVER` is used by the hook scripts (local requests). `NTFY_TAILSCALE_URL` is used in the action button URLs (the phone makes these HTTP calls, so they must be phone-reachable).
+
+### 2. Start the ntfy server
+
+```bash
+cp docker/.env.example docker/.env  # edit TZ if needed
+cd docker/
+docker compose up -d
+```
+
+### 3. Create user and grant topic access
+
+The script reads username and topics from the credentials file:
+
+```bash
+NTFY_PASSWORD=<your-password> ./docker/setup-auth.sh
+```
 
 ### 4. Configure Claude Code hooks
 
@@ -118,10 +122,10 @@ Add to `~/.claude/settings.json`:
 ### 5. Phone setup
 
 1. Install ntfy from [F-Droid](https://f-droid.org/packages/io.heckel.ntfy/)
-2. Settings → Manage users → add your server URL and credentials
+2. Settings -> Manage users -> add your server URL and credentials
 3. Subscribe to the `cc-approve` topic on your server
 4. Enable WebSockets when prompted
-5. Exempt ntfy from battery optimization (Android Settings → Apps → ntfy → Battery → Unrestricted)
+5. Exempt ntfy from battery optimization (Android Settings -> Apps -> ntfy -> Battery -> Unrestricted)
 
 ### 6. Verify
 
@@ -133,7 +137,7 @@ curl -u user:pass http://localhost:8090/v1/health
 curl -u user:pass -H "Title: Test" -d "Hello" http://localhost:8090/cc-approve
 
 # Test approval hook (tap Approve/Deny on phone within 60s)
-echo '{"tool_name":"Bash","tool_input":{"command":"echo test"},"tool_use_id":"test123","cwd":"/tmp"}' \
+echo '{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"echo test"},"cwd":"/tmp"}' \
   | python3 hooks/ntfy-approve.py
 ```
 
@@ -141,14 +145,11 @@ echo '{"tool_name":"Bash","tool_input":{"command":"echo test"},"tool_use_id":"te
 
 ```
 hooks/
-  ntfy-approve.py   PermissionRequest hook — notification + polling + cleanup
-  ntfy-notify.sh    Notification hook — idle prompt alerts
+  ntfy-approve.py   PermissionRequest hook -- notification + polling + cleanup
+  ntfy-notify.sh    Notification hook -- idle prompt alerts
 docker/
   docker-compose.yml  ntfy container config (port 8090)
   server.yml          ntfy server settings (deny-all auth, local cache)
   setup-auth.sh       one-time user/topic access setup
+  .env.example        environment template (timezone)
 ```
-
-## License
-
-MIT

@@ -11,7 +11,7 @@ services:
       - ntfy-cache:/var/cache/ntfy
       - ntfy-auth:/var/lib/ntfy
     environment:
-      - TZ=Europe/Copenhagen
+      - TZ=${TZ:-UTC}
 
 volumes:
   ntfy-cache:
