@@ -1,0 +1,5 @@
+base-url: "http://localhost:8090"
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "24h"
+auth-file: "/var/lib/ntfy/auth.db"
+auth-default-access: "deny-all"

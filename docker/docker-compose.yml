@@ -1,0 +1,18 @@
+services:
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    command: serve
+    ports:
+      - "8090:80"
+    volumes:
+      - ./server.yml:/etc/ntfy/server.yml:ro
+      - ntfy-cache:/var/cache/ntfy
+      - ntfy-auth:/var/lib/ntfy
+    environment:
+      - TZ=Europe/Copenhagen
+
+volumes:
+  ntfy-cache:
+  ntfy-auth:
