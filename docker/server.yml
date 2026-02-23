@@ -3,3 +3,6 @@ cache-file: "/var/cache/ntfy/cache.db"
 cache-duration: "24h"
 auth-file: "/var/lib/ntfy/auth.db"
 auth-default-access: "deny-all"
+visitor-request-limit-burst: 1000
+visitor-request-limit-replenish: 1s
+visitor-subscriber-rate-limiting: false

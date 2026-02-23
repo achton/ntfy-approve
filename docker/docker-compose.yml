@@ -2,7 +2,7 @@ services:
   ntfy:
     image: binwiederhier/ntfy:latest
     container_name: ntfy
-    restart: unless-stopped
+    restart: always
     command: serve
     ports:
       - "8090:80"
