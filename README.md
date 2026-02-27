@@ -76,7 +76,7 @@ If your phone and laptop are always on the same WiFi network, you can skip Tails
 NTFY_TAILSCALE_URL=http://192.168.1.x:8090
 ```
 
-This is simpler but comes with limitations: it only works on the same network (no approvals from mobile data or other WiFi), the LAN IP may change unless you configure a static DHCP lease on your router, and traffic is unencrypted HTTP rather than a WireGuard tunnel.
+This is simpler but comes with limitations: it only works on the same network (no approvals from mobile data or other WiFi), you need to know your laptop's IP and update the credentials file every time you switch WiFi networks, and traffic is unencrypted HTTP rather than a WireGuard tunnel.
 
 ### Why self-hosted ntfy
 
