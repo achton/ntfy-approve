@@ -66,6 +66,18 @@ The credentials file stores two URLs for this reason:
 - `NTFY_SERVER` — `http://localhost:8090` for the hook scripts (running on the same machine)
 - `NTFY_TAILSCALE_URL` — `http://<tailscale-ip>:8090` for the phone (used in notification action button URLs, since the phone can't reach `localhost`)
 
+### Alternative: LAN-only (no Tailscale)
+
+> **Note:** This approach is untested. It should work in theory but has not been verified.
+
+If your phone and laptop are always on the same WiFi network, you can skip Tailscale entirely. The Docker port mapping (`"8090:80"`) binds to all interfaces by default, so ntfy is already reachable from your LAN. Just set `NTFY_TAILSCALE_URL` to your machine's local IP:
+
+```bash
+NTFY_TAILSCALE_URL=http://192.168.1.x:8090
+```
+
+This is simpler but comes with limitations: it only works on the same network (no approvals from mobile data or other WiFi), the LAN IP may change unless you configure a static DHCP lease on your router, and traffic is unencrypted HTTP rather than a WireGuard tunnel.
+
 ### Why self-hosted ntfy
 
 You could use the public ntfy.sh server, but self-hosting means:
