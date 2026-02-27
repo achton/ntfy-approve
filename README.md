@@ -1,12 +1,80 @@
 # ntfy-approve
 
-Approve or deny Claude Code tool calls from your phone via [ntfy](https://ntfy.sh/) push notifications.
+Approve or deny [Claude Code](https://docs.anthropic.com/en/docs/claude-code) tool calls from your phone via [ntfy](https://ntfy.sh/) push notifications.
 
-## How it works
+## Why this exists
 
-Claude Code blocks when it needs permission to use a tool. This project sends a push notification with **Approve** and **Deny** action buttons, so you can unblock it from your phone without returning to the terminal.
+Claude Code is an AI coding agent that runs in your terminal. It can read files, write code, run shell commands — but it asks for permission before doing anything potentially destructive. That permission prompt blocks the terminal until you respond.
 
-Both channels are active simultaneously — the terminal prompt and the phone notification. Respond from whichever device is convenient. If you respond from the terminal, the phone notification is automatically deleted.
+This is fine when you're at your desk. But Claude Code sessions can run for minutes at a time, and you might walk away to make coffee, sit on the couch, or be in another room entirely. When that happens, Claude is stuck waiting, and your task stalls.
+
+**ntfy-approve** solves this by sending each permission request as a push notification to your phone. You get a notification with the tool name and command, tap **Approve** or **Deny**, and Claude continues — no need to walk back to your laptop.
+
+## Architecture
+
+The system has three components connected over a [Tailscale](https://tailscale.com/) mesh network:
+
+```
+┌─────────────────────────────────────────────────┐
+│  YOUR MACHINE                                   │
+│                                                 │
+│  Claude Code (terminal)                         │
+│    ├─ Needs permission for a tool               │
+│    └─→ Fires PermissionRequest hook             │
+│                                                 │
+│  ntfy-approve.py (runs in parallel w/ prompt)   │
+│    ├─ POST notification → ntfy server           │
+│    └─ Poll response topic every 3s              │
+│                                                 │
+│  ntfy server (Docker, localhost:8090)            │
+│    ├─ Topic: cc-approve  (notifications out)    │
+│    └─ Topic: cc-response (decisions back)       │
+│                                                 │
+└──────────────────────┬──────────────────────────┘
+                       │ Tailscale
+┌──────────────────────┴──────────────────────────┐
+│  YOUR PHONE                                     │
+│                                                 │
+│  ntfy app                                       │
+│    ├─ Subscribed to cc-approve via WebSocket     │
+│    ├─ Shows notification with [Approve] [Deny]  │
+│    └─ Button tap POSTs to cc-response topic     │
+│                                                 │
+└─────────────────────────────────────────────────┘
+```
+
+Both channels (terminal prompt and phone notification) are active simultaneously. Respond from whichever device is convenient:
+
+- **Phone answers first** — Claude gets the decision, notification auto-dismisses
+- **Terminal answers first** — the hook process is killed, cleanup deletes the phone notification
+- **Neither answers within 120s** — the hook exits silently, terminal prompt remains active
+
+A second hook (`ntfy-notify.sh`) sends a lightweight push notification whenever Claude is idle and waiting for user input, so you know when to check back.
+
+### How Claude Code hooks work
+
+Claude Code supports [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) — shell commands that run in response to lifecycle events. This project uses two:
+
+- **`PermissionRequest`** — fires when Claude needs permission for a tool. The hook runs *in parallel* with the normal terminal prompt. If the hook returns a JSON decision (`allow` or `deny`), Claude uses it. If the hook exits without output (timeout, error, or terminal answered first), Claude falls back to the terminal prompt.
+- **`Notification`** — fires on events like `idle_prompt`. This hook is fire-and-forget: it sends a notification and exits immediately.
+
+### Why Tailscale
+
+The ntfy server runs on localhost and is not exposed to the internet. [Tailscale](https://tailscale.com/) creates a private mesh VPN between your devices, so your phone can reach the ntfy server at its Tailscale IP without any port forwarding, dynamic DNS, or public exposure.
+
+The credentials file stores two URLs for this reason:
+- `NTFY_SERVER` — `http://localhost:8090` for the hook scripts (running on the same machine)
+- `NTFY_TAILSCALE_URL` — `http://<tailscale-ip>:8090` for the phone (used in notification action button URLs, since the phone can't reach `localhost`)
+
+### Why self-hosted ntfy
+
+You could use the public ntfy.sh server, but self-hosting means:
+- No rate limits on your own topics
+- Auth is locked down (`deny-all` default — only your user can access the topics)
+- No dependency on an external service
+- Full control over message retention and server config
+
+## How it works in detail
 
 ```
 Claude Code
